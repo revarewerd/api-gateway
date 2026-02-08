@@ -1,0 +1,17 @@
+# API Gateway Build
+target/
+project/target/
+project/project/
+
+# IDE
+.idea/
+.metals/
+.bloop/
+.bsp/
+*.iml
+
+# OS
+.DS_Store
+
+# Logs
+*.log

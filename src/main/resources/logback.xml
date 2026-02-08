@@ -1,0 +1,20 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Gateway логи -->
+    <logger name="com.wayrecall.gateway" level="DEBUG"/>
+
+    <!-- ZIO HTTP — только предупреждения -->
+    <logger name="zio.http" level="WARN"/>
+
+    <!-- Netty — только ошибки -->
+    <logger name="io.netty" level="ERROR"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
