@@ -189,12 +189,12 @@ object AuthMiddleware:
     for
       config <- ZIO.service[GatewayConfig]
       payload = JwtPayload(
-        sub   = context.userId.value.toString,
-        cid   = context.companyId.value.toString,
-        email = context.email,
-        roles = context.roles.map(_.toString).toList,
-        sid   = context.sessionId.toString,
-        exp   = context.expiresAt.getEpochSecond
+        userId    = context.userId.value.toString,
+        cid       = context.companyId.value.toString,
+        email     = context.email,
+        roles     = context.roles.map(_.toString).toList,
+        sid       = context.sessionId.toString,
+        expiresAt = context.expiresAt.getEpochSecond
       ).toJson
       token   = JwtZIOJson.encode(payload, config.jwt.secret, JwtAlgorithm.HS256)
       _      <- ZIO.logDebug(s"[AUTH] Создан JWT для ${context.email}, expires=${context.expiresAt}")
@@ -224,12 +224,12 @@ object AuthMiddleware:
                  ZIO.fromEither(Role.fromString(r))
                )
     yield UserContext(
-      userId    = UserId(UUID.fromString(payload.sub)),
+      userId    = UserId(UUID.fromString(payload.userId)),
       companyId = CompanyId(UUID.fromString(payload.cid)),
       email     = payload.email,
       roles     = roles.toSet,
       sessionId = UUID.fromString(payload.sid),
-      expiresAt = Instant.ofEpochSecond(payload.exp)
+      expiresAt = Instant.ofEpochSecond(payload.expiresAt)
     )
 
   /** Проверка не протух ли токен. Сравниваем exp с текущим временем. */
@@ -245,13 +245,14 @@ object AuthMiddleware:
 
 // ─── JWT Payload — внутренний формат токена ──────────────────────────────
 // Это НЕ public API! Используется только внутри AuthMiddleware.
-// Поля совпадают с тем что записано в JWT claim при создании токена.
+// Важно: не использовать стандартные JWT claim имена (sub, exp, iss, aud, iat, nbf, jti)
+// т.к. jwt-scala извлекает их из content в отдельные поля JwtClaim.
 // private — не видно снаружи пакета middleware.
 private final case class JwtPayload(
-  sub:   String,       // userId (UUID строкой)
-  cid:   String,       // companyId (UUID строкой)
-  email: String,       // email пользователя
-  roles: List[String], // ["Admin", "User"] — роли строками
-  sid:   String,       // sessionId (UUID строкой)
-  exp:   Long          // Unix timestamp истечения токена
+  userId:    String,       // userId (UUID строкой)
+  cid:       String,       // companyId (UUID строкой)
+  email:     String,       // email пользователя
+  roles:     List[String], // ["Admin", "User"] — роли строками
+  sid:       String,       // sessionId (UUID строкой)
+  expiresAt: Long          // Unix timestamp истечения токена
 ) derives JsonEncoder, JsonDecoder

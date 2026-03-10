@@ -38,12 +38,23 @@ import zio.logging.backend.SLF4J
 //   Или в Docker: java -jar api-gateway.jar
 //
 // Переменные окружения (переопределяют application.conf):
-//   GATEWAY_HOST, GATEWAY_PORT — адрес/порт сервера
-//   JWT_SECRET                 — ключ для подписи JWT (обязательно менять в проде!)
-//   DEVICE_MANAGER_URL         — URL device-manager бэкенда
-//   AUTH_SERVICE_URL            — URL auth-service бэкенда
-//   CORS_BILLING_ORIGIN        — Origin для billing SPA
-//   CORS_MONITORING_ORIGIN     — Origin для monitoring SPA
+//   GATEWAY_HOST, GATEWAY_PORT   — адрес/порт сервера
+//   JWT_SECRET                   — ключ для подписи JWT (обязательно менять в проде!)
+//   CORS_BILLING_ORIGIN          — Origin для billing SPA
+//   CORS_MONITORING_ORIGIN       — Origin для monitoring SPA
+//   CONNECTION_MANAGER_URL       — URL connection-manager (Block 1)
+//   DEVICE_MANAGER_URL           — URL device-manager бэкенда (Block 1)
+//   HISTORY_WRITER_URL           — URL history-writer (Block 1)
+//   RULE_CHECKER_URL             — URL rule-checker (Block 2)
+//   NOTIFICATION_SERVICE_URL     — URL notification-service (Block 2)
+//   ANALYTICS_SERVICE_URL        — URL analytics-service (Block 2)
+//   USER_SERVICE_URL             — URL user-service (Block 2)
+//   ADMIN_SERVICE_URL            — URL admin-service (Block 2)
+//   INTEGRATION_SERVICE_URL      — URL integration-service (Block 2)
+//   MAINTENANCE_SERVICE_URL      — URL maintenance-service (Block 2)
+//   SENSORS_SERVICE_URL          — URL sensors-service (Block 2)
+//   WEBSOCKET_SERVICE_URL        — URL websocket-service (Block 3)
+//   AUTH_SERVICE_URL             — URL auth-service (Block 3)
 // ─────────────────────────────────────────────────────────────────────────────
 object Main extends ZIOAppDefault:
 
@@ -76,22 +87,58 @@ object Main extends ZIOAppDefault:
       _      <- ZIO.logInfo("╔═══════════════════════════════════════════════════════════╗")
       _      <- ZIO.logInfo("║         WAYRECALL API GATEWAY — ЗАПУСК                   ║")
       _      <- ZIO.logInfo("╚═══════════════════════════════════════════════════════════╝")
-      _      <- ZIO.logInfo(s"  Сервер:          ${config.server.host}:${config.server.port}")
+      _      <- ZIO.logInfo(s"  Сервер:           ${config.server.host}:${config.server.port}")
       _      <- ZIO.logInfo(s"  JWT issuer:       ${config.jwt.issuer}")
       _      <- ZIO.logInfo(s"  JWT TTL:          ${config.jwt.expirationHours}h")
       _      <- ZIO.logInfo(s"  CORS billing:     ${config.cors.billingOrigin}")
       _      <- ZIO.logInfo(s"  CORS monitoring:  ${config.cors.monitoringOrigin}")
-      _      <- ZIO.logInfo(s"  Device Manager:   ${config.services.deviceManager.baseUrl} (timeout ${config.services.deviceManager.timeoutMs}ms)")
-      _      <- ZIO.logInfo(s"  Auth Service:     ${config.services.authService.baseUrl} (timeout ${config.services.authService.timeoutMs}ms)")
-      _      <- ZIO.logInfo("─────────────────────────────────────────────────────────────")
-      _      <- ZIO.logInfo("  Маршруты:")
-      _      <- ZIO.logInfo("    POST /api/v1/auth/login    — логин (открытый)")
-      _      <- ZIO.logInfo("    GET  /health               — healthcheck (открытый)")
-      _      <- ZIO.logInfo("    ANY  /api/v1/devices/**    → device-manager (защищённый)")
-      _      <- ZIO.logInfo("    ANY  /api/v1/vehicles/**   → device-manager (защищённый)")
-      _      <- ZIO.logInfo("    ANY  /api/v1/billing/**    → device-manager (защищённый)")  // TODO: billing-service
-      _      <- ZIO.logInfo("─────────────────────────────────────────────────────────────")
-      _      <- ZIO.logInfo("  Ожидаю запросы... (Ctrl+C для остановки)")
+      _      <- ZIO.logInfo("─────────────────── Block 1: Data Collection ──────────────")
+      _      <- ZIO.logInfo(s"  Connection Manager: ${config.services.connectionManager.baseUrl} (timeout ${config.services.connectionManager.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Device Manager:     ${config.services.deviceManager.baseUrl} (timeout ${config.services.deviceManager.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  History Writer:     ${config.services.historyWriter.baseUrl} (timeout ${config.services.historyWriter.timeoutMs}ms)")
+      _      <- ZIO.logInfo("─────────────────── Block 2: Business Logic ───────────────")
+      _      <- ZIO.logInfo(s"  Rule Checker:       ${config.services.ruleChecker.baseUrl} (timeout ${config.services.ruleChecker.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Notifications:      ${config.services.notificationService.baseUrl} (timeout ${config.services.notificationService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Analytics:          ${config.services.analyticsService.baseUrl} (timeout ${config.services.analyticsService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  User Service:       ${config.services.userService.baseUrl} (timeout ${config.services.userService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Admin Service:      ${config.services.adminService.baseUrl} (timeout ${config.services.adminService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Integration:        ${config.services.integrationService.baseUrl} (timeout ${config.services.integrationService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Maintenance:        ${config.services.maintenanceService.baseUrl} (timeout ${config.services.maintenanceService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Sensors:            ${config.services.sensorsService.baseUrl} (timeout ${config.services.sensorsService.timeoutMs}ms)")
+      _      <- ZIO.logInfo("─────────────────── Block 3: Presentation ─────────────────")
+      _      <- ZIO.logInfo(s"  WebSocket:          ${config.services.websocketService.baseUrl} (timeout ${config.services.websocketService.timeoutMs}ms)")
+      _      <- ZIO.logInfo(s"  Auth Service:       ${config.services.authService.baseUrl} (timeout ${config.services.authService.timeoutMs}ms)")
+      _      <- ZIO.logInfo("─────────────────── Маршруты ──────────────────────────────")
+      _      <- ZIO.logInfo("  Открытые:")
+      _      <- ZIO.logInfo("    POST /api/v1/auth/login         — логин")
+      _      <- ZIO.logInfo("    GET  /health                    — healthcheck")
+      _      <- ZIO.logInfo("    OPTIONS /*                      — CORS preflight")
+      _      <- ZIO.logInfo("  Block 1 — Data Collection:")
+      _      <- ZIO.logInfo("    ANY  /api/v1/devices/**         → device-manager")
+      _      <- ZIO.logInfo("    ANY  /api/v1/vehicles/**        → device-manager")
+      _      <- ZIO.logInfo("    ANY  /api/v1/history/**         → history-writer")
+      _      <- ZIO.logInfo("  Block 2 — Business Logic:")
+      _      <- ZIO.logInfo("    ANY  /api/v1/geozones/**        → rule-checker")
+      _      <- ZIO.logInfo("    ANY  /api/v1/speed-rules/**     → rule-checker")
+      _      <- ZIO.logInfo("    ANY  /api/v1/notifications/**   → notification-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/reports/**         → analytics-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/users/**           → user-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/roles/**           → user-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/groups/**          → user-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/company/**         → user-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/audit/**           → user-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/admin/**           → admin-service (SuperAdmin only!)")
+      _      <- ZIO.logInfo("    ANY  /api/v1/integrations/**    → integration-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/maintenance/**     → maintenance-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/templates/**       → maintenance-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/schedules/**       → maintenance-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/sensors/**         → sensors-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/calibrations/**    → sensors-service")
+      _      <- ZIO.logInfo("    ANY  /api/v1/events/**          → sensors-service")
+      _      <- ZIO.logInfo("  Block 3 — Presentation:")
+      _      <- ZIO.logInfo("    ANY  /api/v1/ws/**              → websocket-service")
+      _      <- ZIO.logInfo("═══════════════════════════════════════════════════════════")
+      _      <- ZIO.logInfo(s"  Всего: 24 маршрута → 13 бэкендов. Ожидаю запросы... (Ctrl+C для остановки)")
 
       // 3. Запустить HTTP-сервер
       //    Server.serve() — блокирующий вызов, не возвращает управление

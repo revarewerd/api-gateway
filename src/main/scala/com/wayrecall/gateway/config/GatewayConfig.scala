@@ -62,10 +62,30 @@ final case class JwtConfig(
 
 /** URL-ы бэкенд-сервисов — куда gateway проксирует запросы.
  *  Каждый сервис — ServiceEndpoint(baseUrl, timeoutMs).
- *  При добавлении нового микросервиса — добавить поле сюда + в application.conf */
+ *  При добавлении нового микросервиса — добавить поле сюда + в application.conf.
+ *
+ *  Порты по умолчанию (devlopment):
+ *    Block 1: CM=10090, HW=10091, DM=10092
+ *    Block 2: maintenance=8087, user=8091, ruleChecker=8093, notification=8094,
+ *             analytics=8095, integration=8096, admin=8097, sensors=8098
+ *    Block 3: websocket=8090 */
 final case class ServicesConfig(
-  deviceManager: ServiceEndpoint,  // Device Manager API (порт 8083)
-  authService:   ServiceEndpoint   // Auth Service API (порт 8092)
+  // ─── Block 1: Data Collection ──────────────────────────────────
+  connectionManager: ServiceEndpoint,   // CM: TCP-сервер GPS (порт 10090, только health/metrics)
+  deviceManager:     ServiceEndpoint,   // DM: CRUD устройств (порт 10092)
+  historyWriter:     ServiceEndpoint,   // HW: История GPS точек (порт 10091)
+  // ─── Block 2: Business Logic ───────────────────────────────────
+  ruleChecker:       ServiceEndpoint,   // Геозоны и правила скорости (порт 8093)
+  notificationService: ServiceEndpoint, // Уведомления: email/SMS/push/Telegram (порт 8094)
+  analyticsService:  ServiceEndpoint,   // Отчёты и экспорт (порт 8095)
+  userService:       ServiceEndpoint,   // Пользователи, роли, организации (порт 8091)
+  adminService:      ServiceEndpoint,   // Системное администрирование (порт 8097)
+  integrationService: ServiceEndpoint,  // Ретрансляция: Wialon, webhooks (порт 8096)
+  maintenanceService: ServiceEndpoint,  // Плановое ТО, пробег (порт 8087)
+  sensorsService:    ServiceEndpoint,   // Датчики, калибровка (порт 8098)
+  // ─── Block 3: Presentation ─────────────────────────────────────
+  websocketService:  ServiceEndpoint,   // Real-time GPS через WebSocket (порт 8090)
+  authService:       ServiceEndpoint    // Auth Service (порт 8092, TODO: user-service)
 )
 
 /** Единичный бэкенд-сервис — URL и таймаут.
@@ -122,8 +142,22 @@ object GatewayConfig:
           expirationHours = 24
         ),
         services = ServicesConfig(
-          deviceManager = ServiceEndpoint("http://localhost:8083", 30000),
-          authService   = ServiceEndpoint("http://localhost:8092", 30000)
+          // Block 1: Data Collection
+          connectionManager  = ServiceEndpoint("http://localhost:10090", 30000),
+          deviceManager      = ServiceEndpoint("http://localhost:10092", 30000),
+          historyWriter      = ServiceEndpoint("http://localhost:10091", 30000),
+          // Block 2: Business Logic
+          ruleChecker        = ServiceEndpoint("http://localhost:8093", 30000),
+          notificationService = ServiceEndpoint("http://localhost:8094", 30000),
+          analyticsService   = ServiceEndpoint("http://localhost:8095", 30000),
+          userService        = ServiceEndpoint("http://localhost:8091", 30000),
+          adminService       = ServiceEndpoint("http://localhost:8097", 30000),
+          integrationService = ServiceEndpoint("http://localhost:8096", 30000),
+          maintenanceService = ServiceEndpoint("http://localhost:8087", 30000),
+          sensorsService     = ServiceEndpoint("http://localhost:8098", 30000),
+          // Block 3: Presentation
+          websocketService   = ServiceEndpoint("http://localhost:8090", 30000),
+          authService        = ServiceEndpoint("http://localhost:8092", 30000)
         ),
         cors = CorsConfig(
           billingOrigin    = "http://localhost:3001",

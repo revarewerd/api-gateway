@@ -31,9 +31,31 @@ import java.util.UUID
 //   POST /api/v1/auth/login         — логин (открытый)
 //   GET  /health                    — healthcheck (открытый)
 //   OPTIONS /*                      — CORS preflight (открытый)
-//   ANY  /api/v1/devices/**         → device-manager (защищённый)
-//   ANY  /api/v1/vehicles/**        → device-manager (защищённый)
-//   ANY  /api/v1/billing/**         → device-manager (защищённый, TODO: billing-service)
+//   ─── Block 1: Data Collection ──────────────────────────────────
+//   ANY  /api/v1/devices/**         → device-manager     (CRUD устройств)
+//   ANY  /api/v1/vehicles/**        → device-manager     (привязка ТС)
+//   ANY  /api/v1/history/**         → history-writer     (телеметрия, маршруты)
+//   ─── Block 2: Business Logic ───────────────────────────────────
+//   ANY  /api/v1/geozones/**        → rule-checker       (CRUD геозон)
+//   ANY  /api/v1/speed-rules/**     → rule-checker       (правила скорости)
+//   ANY  /api/v1/notifications/**   → notification-service (правила/шаблоны/история уведомлений)
+//   ANY  /api/v1/reports/**         → analytics-service  (отчёты, экспорт)
+//   ANY  /api/v1/users/**           → user-service       (пользователи, роли)
+//   ANY  /api/v1/roles/**           → user-service       (управление ролями)
+//   ANY  /api/v1/groups/**          → user-service       (группы ТС)
+//   ANY  /api/v1/company/**         → user-service       (компания, аудит)
+//   ANY  /api/v1/audit/**           → user-service       (аудит-лог)
+//   ANY  /api/v1/admin/**           → admin-service      (только SuperAdmin!)
+//   ANY  /api/v1/integrations/**    → integration-service (Wialon, webhooks, API keys)
+//   ANY  /api/v1/maintenance/**     → maintenance-service (ТО, расписания)
+//   ANY  /api/v1/templates/**       → maintenance-service (шаблоны ТО)
+//   ANY  /api/v1/schedules/**       → maintenance-service (расписания ТО)
+//   ANY  /api/v1/services/**        → maintenance-service (записи ТО)
+//   ANY  /api/v1/sensors/**         → sensors-service    (датчики, калибровки)
+//   ANY  /api/v1/calibrations/**    → sensors-service    (калибровки)
+//   ANY  /api/v1/events/**          → sensors-service    (события датчиков)
+//   ─── Block 3: Presentation ─────────────────────────────────────
+//   ANY  /api/v1/ws/**              → websocket-service  (WebSocket upgrade)
 //
 // Типы ошибок (все обрабатываются в wrapWithCors):
 //   401 Unauthorized  — нет/невалидный JWT
@@ -75,21 +97,143 @@ object ApiRouter:
         handleOptions(req)
       },
 
-      // ─── Защищённые endpoints (JWT + роль + домен) ──────────────────
-      // Все запросы к /api/v1/devices/** проксируются в device-manager
-      // Путь трансформируется: /api/v1/devices/123 → /devices/123
+      // ═══════════════════════════════════════════════════════════════════
+      // ═══ Block 1: Data Collection (защищённые endpoints) ═══════════════
+      // ═══════════════════════════════════════════════════════════════════
+
+      // Device Manager — CRUD устройств, привязка к ТС
+      // /api/v1/devices/** → device-manager :10092
       Method.ANY / "api" / "v1" / "devices" / trailing -> handler { (req: Request) =>
         handleProtectedProxy("device-manager", req)
       },
-
-      // /api/v1/vehicles/** → device-manager (vehicles — часть device-manager)
+      // /api/v1/vehicles/** → device-manager (vehicles — часть device-manager: assign/unassign)
+      // Примеры: POST /devices/:id/assign/:vehicleId, DELETE /devices/:id/vehicle
       Method.ANY / "api" / "v1" / "vehicles" / trailing -> handler { (req: Request) =>
         handleProtectedProxy("device-manager", req)
       },
 
-      // /api/v1/billing/** → device-manager (временно! TODO: отдельный billing-service)
-      Method.ANY / "api" / "v1" / "billing" / trailing -> handler { (req: Request) =>
-        handleProtectedProxy("device-manager", req)
+      // History Writer — телеметрия, маршруты, статистика
+      // /api/v1/history/** → history-writer :10091
+      // Примеры: GET /history/telemetry/:vehicleId?from=&to=, GET /history/trips/:vehicleId
+      Method.ANY / "api" / "v1" / "history" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("history-writer", req)
+      },
+
+      // ═══════════════════════════════════════════════════════════════════
+      // ═══ Block 2: Business Logic (защищённые endpoints) ════════════════
+      // ═══════════════════════════════════════════════════════════════════
+
+      // Rule Checker — геозоны
+      // /api/v1/geozones/** → rule-checker :8093
+      // Примеры: GET/POST /geozones, GET /geozones/:id, DELETE /geozones/:id
+      Method.ANY / "api" / "v1" / "geozones" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("rule-checker", req)
+      },
+      // Rule Checker — правила скорости
+      // /api/v1/speed-rules/** → rule-checker :8093
+      Method.ANY / "api" / "v1" / "speed-rules" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("rule-checker", req)
+      },
+
+      // Notification Service — правила уведомлений, шаблоны, история
+      // /api/v1/notifications/** → notification-service :8094
+      // Перенаправляет на /api/v1/rules, /api/v1/templates, /api/v1/history внутри сервиса
+      Method.ANY / "api" / "v1" / "notifications" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("notification-service", req)
+      },
+
+      // Analytics Service — отчёты и экспорт
+      // /api/v1/reports/** → analytics-service :8095
+      // Примеры: GET /reports/mileage, GET /reports/fuel, POST /reports/export
+      Method.ANY / "api" / "v1" / "reports" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("analytics-service", req)
+      },
+
+      // User Service — пользователи
+      // /api/v1/users/** → user-service :8091
+      // Примеры: GET /users/me, PUT /users/me, GET /users, POST /users
+      Method.ANY / "api" / "v1" / "users" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("user-service", req)
+      },
+      // User Service — роли
+      // /api/v1/roles/** → user-service :8091
+      Method.ANY / "api" / "v1" / "roles" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("user-service", req)
+      },
+      // User Service — группы ТС
+      // /api/v1/groups/** → user-service :8091
+      Method.ANY / "api" / "v1" / "groups" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("user-service", req)
+      },
+      // User Service — информация о компании
+      // /api/v1/company/** → user-service :8091
+      Method.ANY / "api" / "v1" / "company" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("user-service", req)
+      },
+      // User Service — аудит-лог
+      // /api/v1/audit/** → user-service :8091
+      Method.ANY / "api" / "v1" / "audit" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("user-service", req)
+      },
+
+      // Admin Service — системное администрирование (только SuperAdmin!)
+      // /api/v1/admin/** → admin-service :8097
+      // Примеры: GET /admin/system/health, GET /admin/companies, POST /admin/config/maintenance/enable
+      Method.ANY / "api" / "v1" / "admin" / trailing -> handler { (req: Request) =>
+        handleAdminProxy(req)
+      },
+
+      // Integration Service — Wialon, webhooks, API keys
+      // /api/v1/integrations/** → integration-service :8096
+      // Примеры: GET /integrations/wialon, POST /integrations/webhooks/:id/test
+      Method.ANY / "api" / "v1" / "integrations" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("integration-service", req)
+      },
+
+      // Maintenance Service — плановое ТО
+      // /api/v1/maintenance/** → maintenance-service :8087
+      // Примеры: GET /maintenance/vehicles/:id/overview, POST /maintenance/services
+      Method.ANY / "api" / "v1" / "maintenance" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("maintenance-service", req)
+      },
+      // Maintenance Service — шаблоны ТО
+      // /api/v1/templates/** → maintenance-service :8087
+      // Примеры: GET/POST /templates, GET/PUT/DELETE /templates/:id
+      Method.ANY / "api" / "v1" / "templates" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("maintenance-service", req)
+      },
+      // Maintenance Service — расписания ТО
+      // /api/v1/schedules/** → maintenance-service :8087
+      Method.ANY / "api" / "v1" / "schedules" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("maintenance-service", req)
+      },
+
+      // Sensors Service — датчики, калибровки, события
+      // /api/v1/sensors/** → sensors-service :8098
+      // Примеры: GET /sensors?vehicle_id=, POST /sensors, GET /sensors/:id/values
+      Method.ANY / "api" / "v1" / "sensors" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("sensors-service", req)
+      },
+      // Sensors Service — калибровки
+      // /api/v1/calibrations/** → sensors-service :8098
+      Method.ANY / "api" / "v1" / "calibrations" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("sensors-service", req)
+      },
+      // Sensors Service — события датчиков (слив/заправка)
+      // /api/v1/events/** → sensors-service :8098
+      Method.ANY / "api" / "v1" / "events" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("sensors-service", req)
+      },
+
+      // ═══════════════════════════════════════════════════════════════════
+      // ═══ Block 3: Presentation ═════════════════════════════════════════
+      // ═══════════════════════════════════════════════════════════════════
+
+      // WebSocket Service — real-time GPS позиции через WebSocket
+      // /api/v1/ws/** → websocket-service :8090
+      // Клиент подключается: ws://gateway:8080/api/v1/ws/gps?token=<jwt>
+      Method.ANY / "api" / "v1" / "ws" / trailing -> handler { (req: Request) =>
+        handleProtectedProxy("websocket-service", req)
       }
     )
 
@@ -203,6 +347,52 @@ object ApiRouter:
       yield response
     }
 
+  // ─── Прокси к Admin Service (ТОЛЬКО SuperAdmin!) ────────────────────────
+  // Отдельный обработчик, т.к. admin endpoints требуют роль SuperAdmin.
+  // Проверяет роль ДО проксирования — если не SuperAdmin → 403 Forbidden.
+  private def handleAdminProxy(request: Request): ZIO[GatewayEnv, Nothing, Response] =
+    wrapWithCors(request) {
+      for
+        config    <- ZIO.service[GatewayConfig]
+        requestId <- LogMiddleware.generateRequestId
+        _         <- ZIO.logDebug(s"[$requestId] ▶ [ADMIN] ${request.method} ${request.path}")
+
+        // Шаг 1: Аутентификация
+        authResult <- AuthMiddleware.authenticate(request)
+        context    <- authResult match
+                        case AuthResult.Authenticated(ctx) => ZIO.succeed(ctx)
+                        case AuthResult.Anonymous =>
+                          ZIO.logWarning(s"[$requestId]   ✗ ADMIN: нет токена") *>
+                          ZIO.fail(DomainError.Unauthorized("Требуется авторизация"))
+                        case AuthResult.Failed(err) =>
+                          ZIO.logWarning(s"[$requestId]   ✗ ADMIN: невалидный токен") *>
+                          ZIO.fail(err)
+
+        // Шаг 2: Проверка роли SuperAdmin — строже чем обычный домен
+        _          <- {
+                        if context.hasRole(Role.SuperAdmin) then
+                          ZIO.logDebug(s"[$requestId]   ✓ ADMIN: SuperAdmin подтверждён (${context.email})")
+                        else
+                          ZIO.logWarning(s"[$requestId]   ✗ ADMIN: роль ${context.roles.mkString(",")} недостаточна (нужен SuperAdmin)") *>
+                          ZIO.fail(DomainError.Forbidden("Доступ только для SuperAdmin", Set(Role.SuperAdmin)))
+                      }
+
+        // Шаг 3: Прокси к admin-service
+        endpoint    = resolveEndpoint(config, "admin-service")
+        headers     = AuthMiddleware.enrichHeaders(context, requestId)
+        path        = extractBackendPath(request.path.toString)
+        _          <- ZIO.logDebug(s"[$requestId]   Прокси: ${request.method} ${endpoint.baseUrl}$path")
+        start      <- Clock.instant
+        response   <- ProxyService.forward(endpoint, request, path, headers)
+        end        <- Clock.instant
+        latency     = java.time.Duration.between(start, end).toMillis
+        _          <- ZIO.logInfo(
+                        s"[$requestId] ◀ [ADMIN] ${request.method} ${request.path} → admin-service → ${response.status.code} (${latency}ms) " +
+                        s"user=${context.email}"
+                      )
+      yield response
+    }
+
   // ─── Обёртка: ошибки → Response + CORS ──────────────────────────────────
   // Любой обработчик оборачивается сюда. Гарантии:
   //   1. DomainError → JSON ErrorResponse с правильным HTTP-статусом
@@ -229,13 +419,36 @@ object ApiRouter:
       .status(Status.fromInt(error.statusCode).getOrElse(Status.InternalServerError))
 
   // ─── Имя сервиса → конфиг endpoint-а ───────────────────────────────────
-  // Маппинг логического имени сервиса на его URL из конфига.
-  // Когда добавим billing-service — добавим сюда case "billing" => ...
+  // Маппинг логического имени сервиса на его ServiceEndpoint из конфига.
+  // ServiceEndpoint содержит baseUrl + timeoutMs.
+  //
+  // Block 1: connection-manager, device-manager, history-writer
+  // Block 2: rule-checker, notification-service, analytics-service,
+  //          user-service, admin-service, integration-service,
+  //          maintenance-service, sensors-service
+  // Block 3: websocket-service, auth-service
+  //
+  // При добавлении нового сервиса — добавь case И запись в GatewayConfig.
   private def resolveEndpoint(config: GatewayConfig, serviceName: String) =
     serviceName match
-      case "device-manager" => config.services.deviceManager
-      case "auth-service"   => config.services.authService
-      case _                => config.services.deviceManager  // fallback
+      // Block 1 — Data Collection
+      case "connection-manager"  => config.services.connectionManager
+      case "device-manager"      => config.services.deviceManager
+      case "history-writer"      => config.services.historyWriter
+      // Block 2 — Business Logic
+      case "rule-checker"        => config.services.ruleChecker
+      case "notification-service"=> config.services.notificationService
+      case "analytics-service"   => config.services.analyticsService
+      case "user-service"        => config.services.userService
+      case "admin-service"       => config.services.adminService
+      case "integration-service" => config.services.integrationService
+      case "maintenance-service" => config.services.maintenanceService
+      case "sensors-service"     => config.services.sensorsService
+      // Block 3 — Presentation
+      case "websocket-service"   => config.services.websocketService
+      case "auth-service"        => config.services.authService
+      // Fallback — не должно произойти в production (все имена контролируются в routes)
+      case unknown               => config.services.deviceManager
 
   // ─── Трансформация пути для бэкенда ─────────────────────────────────────
   // Gateway путь:  /api/v1/devices/123

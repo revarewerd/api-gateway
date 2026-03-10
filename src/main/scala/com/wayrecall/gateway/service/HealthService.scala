@@ -65,10 +65,25 @@ object HealthService:
 
     /** Список бэкендов для проверки.
      *  Каждый элемент: (человекочитаемое имя, ServiceEndpoint из конфига).
-     *  При добавлении нового микросервиса — добавить сюда. */
+     *  При добавлении нового микросервиса — добавить сюда.
+     *  Порядок: Block 1 → Block 2 → Block 3 */
     private val backends: List[(String, ServiceEndpoint)] = List(
-      "device-manager" -> config.services.deviceManager,
-      "auth-service"   -> config.services.authService
+      // Block 1 — Data Collection
+      "connection-manager"  -> config.services.connectionManager,
+      "device-manager"      -> config.services.deviceManager,
+      "history-writer"      -> config.services.historyWriter,
+      // Block 2 — Business Logic
+      "rule-checker"        -> config.services.ruleChecker,
+      "notification-service"-> config.services.notificationService,
+      "analytics-service"   -> config.services.analyticsService,
+      "user-service"        -> config.services.userService,
+      "admin-service"       -> config.services.adminService,
+      "integration-service" -> config.services.integrationService,
+      "maintenance-service" -> config.services.maintenanceService,
+      "sensors-service"     -> config.services.sensorsService,
+      // Block 3 — Presentation
+      "websocket-service"   -> config.services.websocketService,
+      "auth-service"        -> config.services.authService
     )
 
     override def check: UIO[GatewayHealthResponse] =
@@ -160,6 +175,6 @@ object HealthService:
         config <- ZIO.service[GatewayConfig]
         client <- ZIO.service[Client]
         now    <- Clock.instant
-        _      <- ZIO.logDebug(s"[HEALTH] HealthService создан, startTime=$now, бэкенды: ${List("device-manager", "auth-service").mkString(", ")}")
+        _      <- ZIO.logDebug(s"[HEALTH] HealthService создан, startTime=$now, бэкенды: 13 сервисов (Block 1-3)")
       yield Live(config, client, now)
     )
